@@ -9,6 +9,7 @@ library(ggplot2)
 library(TSA)
 library(forecast)
 library(tseries)
+library(zoo)
 
 setwd(dirname(getActiveDocumentContext()$path))
 diary_df <- fread("data/SN_d_tot_V2.0.csv",header=TRUE)
@@ -143,18 +144,24 @@ adf.test(D_dif_train_ts)
 #autoarima (paquete forecast en R o pmdarima en Python).
 
 Acf(D_dif_train_ts)
+#q<=11 Q<=1
 #Se puede ver que hay una correlacion fuerte entre los terminos,
 #aunque va descendiendo a medida que pasan los meses
 
 Pacf(D_dif_train_ts)
+#p<=6 P<=1
 #Las correlaciones fuertes estan entre los pimeros y ultimos meses de cada año
 
 #Viendo las graficas podemos afirmar que estamos ante un Proceso Autoregresivo (AR).
 #En estos casos no podemos determinar la p y la P, únicamente q y Q, las cuales
 #valen 1 y 12 respectivamente
 mod_arima<-auto.arima(train_ts,
-                       max.q = 1,
-                       max.Q = 12,
+                       max.q = 0,
+                       max.Q = 0,
+                       max.p = 6,
+                       max.P = 1,
+                       d=0,
+                       D=1,
                        trace = T,
                        ic=c("aicc"),
                        stepwise = T)
@@ -164,8 +171,8 @@ checkresiduals(mod_arima)
 #############################################################################
 #h) Predecir con el modelo arima obtenido los resultados del conjunto de test y 
 #medir el error mediante MAE y MAPE.
-pred_arima <- forecast(mod_arima,h=(3*11)+3)
-pred_arima
+pred_arima <- forecast(mod_arima,h=(3*12)+3)
+
 plot(pred_arima)
 
 REAL=test$SNvalue
@@ -180,18 +187,20 @@ MAPE_ARIMA
 #############################################################################
 #i) Comparar convenientemente los resultados obtenidos por esta predicción con los datos anuales.
 #Entiendo, entonces, que tengo que comparar con los anuales.... hay que transformar a anual
-
-pred_arima
 yearly_df$decimal_year <- trunc(yearly_df$decimal_year)
-yearly_ts<-ts(yearly_df$SNvalue,start=c(min(train$year),1), frequency=12)
+yearly_ts<-ts(yearly_df$SNvalue,start=2015,end=2022,frequency=1)
+
+pred_arima_df <- data.frame(SNvalue=as.matrix(pred_arima$mean),
+                            date=as.integer(as.numeric(time(pred_arima$mean))))
+
+pred_arima_df <- pred_arima_df %>% group_by(date) %>%
+  summarize(SNvalue=mean(SNvalue), .groups = 'drop')
 
 
+arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2023,frequency=1)
 
-
-
-plot(pred_arima$mean,main="Prediccion TBATS(0,(0,0),1,{<12,4>})")
-lines(yearly_ts,col="red")
-plot(forecast(pred_arima,h=(3*12)+3))
+ts.plot(yearly_ts, arima_ts,lty = c(1,3),col="red",
+        main="Prediccion a 3 años y 3 meses de la actividad de Manchas Solares")
 
 #############################################################################
 #j) Estimar el valor esperado para el número promedio de manchas en el próximo máximo de actividad solar.
@@ -202,11 +211,13 @@ loa_tbats<-tbats(train_ts)
 pred_tbats<-forecast(loa_tbats,h=(3*12)+3)
 plot(pred_tbats$mean,main="Prediccion TBATS(0,(0,0),1,{<12,4>})")
 lines(test_ts,col="red")
-plot(forecast(loa_tbats,h=(3*12)+3))
+plot(forecast(loa_tbats,h=(3*12)+3)$mean)
 lines(test_ts,col="red")
       
 TBATS=as.numeric(pred_tbats$mean)
-ETBATS=TBATS-REAL
-MAPE_TBATS=sum(abs(ETBATS)/test$PPM)/length(test$PPM)
-
+ETBATS=TBATS-test$SNvalue
+MAE_BATS=sum(abs(ETBATS))/length(test$SNvalue)
+MAE_BATS
+MAPE_TBATS=sum(abs(ETBATS)/test$SNvalue)/length(test$SNvalue)
+MAPE_TBATS
 
