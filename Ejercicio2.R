@@ -26,12 +26,13 @@ ggplot(data = diary_df,
 
 ggsave("diary_fig.png")
 
+library(plotly)
 #Representacion de la info anual
-ggplot(data = yearly_df,
+ggplotly(ggplot(data = yearly_df,
        mapping = aes(x = decimal_year, y = SNvalue))+
   ggtitle("Ciclo de actividad del Sol: Promedio Anual de manchas solares")+
   geom_point(aes(color=SNvalue))+
-  geom_line(aes(color=SNvalue))
+  geom_line(aes(color=SNvalue)))
 
 ggsave("yearly_fig.png")
 
@@ -204,20 +205,24 @@ ts.plot(yearly_ts, arima_ts,lty = c(1,3),col="red",
 
 #############################################################################
 #j) Estimar el valor esperado para el número promedio de manchas en el próximo máximo de actividad solar.
-test_ts<-ts(test$SNvalue,start=c(min(test$year),1), frequency=12)
+pred_arima <- forecast(mod_arima,h=11*12)
 
-#Vamos a probar el TBATS
-loa_tbats<-tbats(train_ts)
-pred_tbats<-forecast(loa_tbats,h=(3*12)+3)
-plot(pred_tbats$mean,main="Prediccion TBATS(0,(0,0),1,{<12,4>})")
-lines(test_ts,col="red")
-plot(forecast(loa_tbats,h=(3*12)+3)$mean)
-lines(test_ts,col="red")
-      
-TBATS=as.numeric(pred_tbats$mean)
-ETBATS=TBATS-test$SNvalue
-MAE_BATS=sum(abs(ETBATS))/length(test$SNvalue)
-MAE_BATS
-MAPE_TBATS=sum(abs(ETBATS)/test$SNvalue)/length(test$SNvalue)
-MAPE_TBATS
+plot(pred_arima)
+
+pred_arima
+
+pred_arima_df <- data.frame(SNvalue=as.matrix(pred_arima$mean),
+                            date=as.integer(as.numeric(time(pred_arima$mean))))
+
+pred_arima_df <- pred_arima_df %>% group_by(date) %>%
+  summarize(SNvalue=mean(SNvalue), .groups = 'drop')
+
+
+arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2030,frequency=1)
+
+ts.plot(yearly_ts, arima_ts,lty = c(1,3),col="red",
+        main="Prediccion a 11 años de la actividad de Manchas Solares")
+
+#Sentencia que retorna la fila con mayor SN de la prediccion
+pred_arima_df[which.max(pred_arima_df$SNvalue),]
 
