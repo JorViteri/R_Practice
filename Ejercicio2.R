@@ -187,8 +187,11 @@ mod_arima<-auto.arima(train_ts,
                        ic=c("aicc"),
                        stepwise = T)
 
+
 checkresiduals(mod_arima)
+#Se ve que hay alta correalocion con los residuos del periodo 132, pero no se repite
 Box.test(mod_arima$residuals,type = "Ljung-Box")
+#El test acepta la Ho: los residuos son independientes
 
 #############################################################################
 #h) Predecir con el modelo arima obtenido los resultados del conjunto de test y 
@@ -212,10 +215,14 @@ MAPE_ARIMA
 #Entiendo, entonces, que tengo que comparar con los anuales.... hay que transformar a anual
 yearly_df$decimal_year <- trunc(yearly_df$decimal_year)
 yearly_ts<-ts(yearly_df$SNvalue,start=2015,end=2022,frequency=1)
+#Tenemos ya la serie anual
 
+#Es preciso que los datos de la prediccion tengan una dimension temporal adecuada, así que primero
+#generamos un df a partir de la ts
 pred_arima_df <- data.frame(SNvalue=as.matrix(pred_arima$mean),
                             date=as.integer(as.numeric(time(pred_arima$mean))))
 
+#A continuación, con un bucle, asignamos los valores de añó correspondientes.
 int_year=2020
 
 for(i in 1:nrow(pred_arima_df)){
@@ -227,17 +234,20 @@ for(i in 1:nrow(pred_arima_df)){
 
 pred_arima_df
 
+#Ahora agrupamos y calculamos la media para cada año
 pred_arima_df <- pred_arima_df %>% group_by(date) %>%
   summarize(SNvalue=mean(SNvalue), .groups = 'drop')
 
-
+#Generamos una serie temporal con los datos adaptados
 arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2023,frequency=1)
 
+#Representación gráfica
 ts.plot(yearly_ts, arima_ts,lty = c(1,3),col="red",
         main="Prediccion a 3 años y 3 meses de la actividad de Manchas Solares")
 
 #############################################################################
 #j) Estimar el valor esperado para el número promedio de manchas en el próximo máximo de actividad solar.
+#Se siguen los mismos pasos que en el caso anterior
 pred_arima <- forecast(mod_arima,h=11*12)
 
 plot(pred_arima)
