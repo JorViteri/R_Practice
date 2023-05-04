@@ -74,21 +74,22 @@ FILTRO %>% head(5)
 
 #EL PERIODO ES DE 131.57-> 132 meses -> 11 años
 #############################################################################
-# d) Tómese como conjunto de entrenamiento la serie mensual en el periodo previo a 2020, 
+# d) Tómese como conjunto de entrenamiento la serie anual en el periodo previo a 2020, 
 #y como conjunto de test el periodo posterior hasta el final de dicha serie.
-train <- monthly_df %>% filter(year<2020)
-test <- monthly_df %>% filter(year>=2020)
+yearly_df$decimal_year <- trunc(yearly_df$decimal_year)
+train <- yearly_df %>% filter(decimal_year<2020)
+test <- yearly_df %>% filter(decimal_year>=2020)
 
 
 #############################################################################
-#e) Realícese el estudio completo de la serie mensual de entrenamiento, comprobando, 
+#e) Realícese el estudio completo de la serie anual de entrenamiento, comprobando, 
 #en caso de existir, su tendencia, estacionalidad, ruido.
 #Haciendo un plot rapido con los datos del dataframe
-plot(train$year, train$SNvalue)
+plot(train$decimal_year, train$SNvalue)
 #A primera vista no hay tendencia no hay, eso es algo
 #Buscamos estacionalidad y ruido
 #Debido a que se trabaja con un periodo de 132 meses, se define la serie temporal de la siguiente forma:
-train_ts<-ts(train$SNvalue,start = c(1,1),frequency=132)
+train_ts<-ts(train$SNvalue,start = c(1,1),frequency=11)
 #Esto nos hace perder los años y meses, pero ante la particularidad de la frecuencia poco se puede hacer excepto
 #definir unos tiempos propios.
 plot(train_ts)
@@ -114,9 +115,6 @@ nsdiffs(train_ts)
 #Lo primero es quitar la estacionalidad de la serie, para ello diferenciamos sobre la estacionalidad
 #Podemos determinar el numero de diferencias necesarias para que sea estacionarioa:
 
-#Primero eliminamos la tendencia con una diferenciación
-diff_train_ts<- diff(train_ts)
-
 #A continuación calculamos el periodo de la estacionalidad, el cual será el lag de la próxima diferencia.
 train_seasonal <- decompose(train_ts)$seasonal
 plot(train_seasonal)
@@ -137,7 +135,7 @@ FILTRO %>% head(5)
 #El valor es 135
 
 #Quitamos la estacionalidad
-D_dif_train_ts<-diff(diff_train_ts,lag=135)
+D_dif_train_ts<-diff(train_ts,lag=11)
 #ndifss y nsdiffs ya indican que no es preciso hacer más diferencias
 nsdiffs(D_dif_train_ts)
 ndiffs(D_dif_train_ts)
@@ -167,25 +165,25 @@ adf.test(D_dif_train_ts)
 #autoarima (paquete forecast en R o pmdarima en Python).
 
 Acf(D_dif_train_ts)
-#La q se corresponde al lag 2, mientras que la Q al 132 del periodo, por lo que Q=1.
+#Se trata de un AR, por lo que no hay q ni Q
 
 Pacf(D_dif_train_ts)
-#La p es dificil de ver, pero parece que 8 es su valor máximo.
-#Por parte de la P, ésta se corresponde al periodo, 132, por lo que P=1
+#La p es 2
+#Por parte de la P, ésta se corresponde al periodo, 11, por lo que P=1
 
 
 #Con los valores sacados de ACF y PACF, otrosí de teniendo en cuenta las diferencias de tendencia y estacionaridad,
 #se llama a auto.arima de la siguiente forma:
 mod_arima<-auto.arima(train_ts,
-                       max.q = 2,
-                       max.Q = 1,
-                       max.p = 8,
-                       max.P = 1,
-                       d=1,
-                       D=1,
-                       trace = T,
-                       ic=c("aicc"),
-                       stepwise = T)
+                      max.q = 0,
+                      max.Q = 0,
+                      max.p = 2,
+                      max.P = 1,
+                      d=0,
+                      D=1,
+                      trace = T,
+                      ic=c("aicc"),
+                      stepwise = T)
 
 checkresiduals(mod_arima)
 Box.test(mod_arima$residuals,type = "Ljung-Box")
@@ -193,7 +191,7 @@ Box.test(mod_arima$residuals,type = "Ljung-Box")
 #############################################################################
 #h) Predecir con el modelo arima obtenido los resultados del conjunto de test y 
 #medir el error mediante MAE y MAPE.
-pred_arima <- forecast(mod_arima,h=(3*12)+3)
+pred_arima <- forecast(mod_arima,h=3)
 
 plot(pred_arima)
 plot(pred_arima$mean)
@@ -220,25 +218,20 @@ int_year=2020
 
 for(i in 1:nrow(pred_arima_df)){
   pred_arima_df$date[i]=int_year
-  if (i%%12==0){
-    int_year = int_year+1
-  }
+  int_year = int_year+1
+
 }
 
 pred_arima_df
 
-pred_arima_df <- pred_arima_df %>% group_by(date) %>%
-  summarize(SNvalue=mean(SNvalue), .groups = 'drop')
-
-
-arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2023,frequency=1)
+arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2022,frequency=1)
 
 ts.plot(yearly_ts, arima_ts,lty = c(1,3),col="red",
         main="Prediccion a 3 años y 3 meses de la actividad de Manchas Solares")
 
 #############################################################################
 #j) Estimar el valor esperado para el número promedio de manchas en el próximo máximo de actividad solar.
-pred_arima <- forecast(mod_arima,h=11*12)
+pred_arima <- forecast(mod_arima,h=11)
 
 plot(pred_arima)
 
@@ -251,14 +244,10 @@ int_year=2020
 
 for(i in 1:nrow(pred_arima_df)){
   pred_arima_df$date[i]=int_year
-  if (i%%12==0){
-    int_year = int_year+1
-  }
+  int_year = int_year+1
 }
 
-pred_arima_df <- pred_arima_df %>% group_by(date) %>%
-  summarize(SNvalue=mean(SNvalue), .groups = 'drop')
-
+pred_arima_df
 
 arima_ts <- ts(pred_arima_df$SNvalue,start=2020,end=2030,frequency=1)
 
